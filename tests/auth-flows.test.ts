@@ -4,7 +4,6 @@ import {
   signInWithEmail,
   signOut,
   signUpWithEmail,
-  startGoogleSignIn,
   type PasswordAuthClient,
 } from '../lib/auth/flows';
 import { safeNextPath } from '../lib/auth/user';
@@ -23,10 +22,6 @@ function authClient(overrides: Partial<PasswordAuthClient['auth']> = {}): Passwo
       signUp: vi.fn(async (credentials) => {
         calls.push({ method: 'signUp', credentials });
         return { data: { session: { user: { id: userA } } }, error: null };
-      }),
-      signInWithOAuth: vi.fn(async (args) => {
-        calls.push({ method: 'signInWithOAuth', args });
-        return { data: { url: 'https://example.supabase.co/auth/v1/authorize' }, error: null };
       }),
       signOut: vi.fn(async () => {
         calls.push({ method: 'signOut' });
@@ -63,6 +58,15 @@ describe('login and logout flows', () => {
     expect(result).toEqual({ ok: false, error: 'Email or password is incorrect.' });
   });
 
+  it('tells an unconfirmed account to use the email link', async () => {
+    const client = authClient({
+      signInWithPassword: vi.fn(async () => ({ error: { message: 'Email not confirmed' } })),
+    });
+    const result = await signInWithEmail(client, { email: 'ada@example.com', password: 'long-password' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/Confirm your email/);
+  });
+
   it('asks a new account to confirm email when no session is returned', async () => {
     const client = authClient({
       signUp: vi.fn(async () => ({ data: { session: null }, error: null })),
@@ -70,7 +74,6 @@ describe('login and logout flows', () => {
     const result = await signUpWithEmail(client, {
       email: 'ada@example.com',
       password: 'long-password',
-      displayName: 'Ada',
       emailRedirectTo: 'http://localhost:3000/auth/callback?next=/dashboard',
     });
     expect(result).toEqual({ ok: true, needsConfirmation: true });
@@ -81,7 +84,6 @@ describe('login and logout flows', () => {
     const result = await signUpWithEmail(client, {
       email: 'ada@example.com',
       password: 'long-password',
-      displayName: '',
       emailRedirectTo: 'http://localhost:3000/auth/callback',
       next: '//evil.example',
     });
@@ -94,35 +96,18 @@ describe('login and logout flows', () => {
     expect(client.calls).toEqual([{ method: 'signOut' }]);
   });
 
-  it('starts Google OAuth with the app callback and rejects a non-https provider URL', async () => {
-    const client = authClient();
-    const ok = await startGoogleSignIn(client, 'http://localhost:3000/auth/callback?next=/dashboard');
-    expect(ok).toEqual({ ok: true, url: 'https://example.supabase.co/auth/v1/authorize' });
-    expect(client.calls[0]).toMatchObject({
-      method: 'signInWithOAuth',
-      args: { provider: 'google', options: { redirectTo: 'http://localhost:3000/auth/callback?next=/dashboard' } },
-    });
-
-    const unsafe = authClient({
-      signInWithOAuth: vi.fn(async () => ({ data: { url: 'javascript:alert(1)' }, error: null })),
-    });
-    await expect(startGoogleSignIn(unsafe, 'http://localhost:3000/auth/callback')).resolves.toMatchObject({ ok: false });
-  });
-
   it('sends failed or hostile callbacks back to login', () => {
     expect(callbackDestination({
       origin: 'http://localhost:3000',
-      code: 'auth-code',
+      verified: true,
       next: 'https://evil.example',
       providerError: null,
-      exchangeFailed: false,
     })).toBe('http://localhost:3000/dashboard');
     expect(callbackDestination({
       origin: 'http://localhost:3000',
-      code: null,
+      verified: false,
       next: '/account',
       providerError: 'access_denied',
-      exchangeFailed: false,
     })).toBe('http://localhost:3000/login?error=auth');
     expect(safeNextPath('/%2F%2Fevil.example')).toBe('/dashboard');
   });

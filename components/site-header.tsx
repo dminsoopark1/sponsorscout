@@ -17,12 +17,21 @@ export async function SiteHeader() {
       </div>
       <nav className="authnav" aria-label="Account">
         {user ? (
-          <>
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/account">Account</Link>
-          </>
+          <details className="accountmenu">
+            <summary>Account</summary>
+            <div className="accountmenu-panel">
+              <Link href="/dashboard">Dashboard</Link>
+              <Link href="/account">Account</Link>
+              <form action="/auth/signout" method="post">
+                <button type="submit">Log out</button>
+              </form>
+            </div>
+          </details>
         ) : (
-          <Link href="/login">Sign in</Link>
+          <>
+            <Link className="navbtn" href="/login">Log in</Link>
+            <Link className="navbtn solid" href="/signup">Sign up</Link>
+          </>
         )}
       </nav>
     </header>

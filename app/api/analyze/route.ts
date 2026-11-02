@@ -8,6 +8,8 @@ import {
   toAnalysis,
   type Analysis,
 } from '../../../lib/analyzer';
+import { getVerifiedUser } from '../../../lib/auth/session';
+import { clientIp, takeAnalysisToken } from '../../../lib/rate-limit';
 
 const requestSchema = z.object({ offer: z.string().trim().min(20).max(12000) });
 
@@ -35,6 +37,22 @@ function json(data: Analysis, extra?: Record<string, string>) {
 
 export async function POST(req: NextRequest) {
   try {
+    let userId: string | null = null;
+    try {
+      userId = (await getVerifiedUser())?.id ?? null;
+    } catch {
+      userId = null;
+    }
+    const limit = takeAnalysisToken({ userId, ip: clientIp(req.headers) });
+    if (!limit.ok) {
+      return NextResponse.json(
+        { error: 'Too many analysis requests. Please wait and try again.' },
+        {
+          status: 429,
+          headers: { 'Cache-Control': 'no-store', 'Retry-After': String(limit.retryAfterSeconds) },
+        },
+      );
+    }
     const payload = requestSchema.safeParse(await req.json());
     if (!payload.success) {
       return NextResponse.json(

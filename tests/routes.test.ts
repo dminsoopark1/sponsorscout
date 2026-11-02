@@ -5,15 +5,15 @@ vi.mock('../lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
     auth: {
       exchangeCodeForSession: vi.fn(async () => ({ error: null })),
+      verifyOtp: vi.fn(async () => ({ error: null })),
       signOut: vi.fn(async () => ({ error: null })),
     },
   })),
 }));
 
+import { readFileSync } from 'node:fs';
 import { GET as callback } from '../app/auth/callback/route';
 import { POST as signOutRoute } from '../app/auth/signout/route';
-import { DELETE as deleteAnalyses, GET as listAnalyses, POST as createAnalysis } from '../app/api/analyses/route';
-import { PATCH as updateProfile } from '../app/api/profile/route';
 import { POST as analyze } from '../app/api/analyze/route';
 import { resetRateLimits } from '../lib/rate-limit';
 import { createClient } from '../lib/supabase/server';
@@ -36,6 +36,13 @@ describe('auth routes', () => {
     expect(createClient).toHaveBeenCalledOnce();
   });
 
+  it('confirms an email link that carries a token hash', async () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_example';
+    const response = await callback(new Request('http://localhost:3000/auth/callback?token_hash=hash&type=signup&next=/account'));
+    expect(response.headers.get('location')).toBe('http://localhost:3000/account');
+  });
+
   it('signs out to the home page', async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_example';
@@ -44,16 +51,10 @@ describe('auth routes', () => {
     expect(response.headers.get('location')).toBe('http://localhost:3000/');
   });
 
-  it('refuses saved analyses and profile edits without a session, even if the body names a user', async () => {
-    const body = JSON.stringify({
-      userId: '22222222-2222-4222-8222-222222222222',
-      displayName: 'Ada',
-      offer: 'A'.repeat(20),
-    });
-    expect((await listAnalyses()).status).toBe(401);
-    expect((await createAnalysis(new Request('http://localhost/api/analyses', { method: 'POST', body }))).status).toBe(401);
-    expect((await deleteAnalyses(new Request('http://localhost/api/analyses?id=11111111-1111-4111-8111-111111111111', { method: 'DELETE' }))).status).toBe(401);
-    expect((await updateProfile(new Request('http://localhost/api/profile', { method: 'PATCH', body }))).status).toBe(401);
+  it('does not save an analysis from the public analyzer', () => {
+    const source = readFileSync(new URL('../components/analyzer.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain('/api/analyses');
+    expect(source).not.toContain('userId');
   });
 
   it('rate limits the public analysis route and still answers a guest under the limit', async () => {

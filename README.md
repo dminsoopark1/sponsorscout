@@ -22,17 +22,14 @@ Set `ANTHROPIC_API_KEY` in `.env.local`. The server-side `/api/analyze` handler 
 
 ## Accounts
 
-Signed-in creators get a dashboard of saved analyses and an account page. Guests can still analyze offers.
+Guests can analyze offers without an account. Email sign-up and login use Supabase Auth. `/dashboard` and `/account` require a signed-in session. Analyses are not stored on the account.
 
-1. Create a Supabase project.
-2. In Authentication → Providers, enable Email. For Google, create an OAuth client and paste its client id and secret into Supabase. In Google Cloud, the authorized redirect URI is Supabase's callback, `https://<project-ref>.supabase.co/auth/v1/callback`, not the app URL.
-3. In Authentication → URL configuration, set the site URL to `http://localhost:3000` for local development. Add redirect URLs `http://localhost:3000/auth/callback` and, when you deploy, `https://<your-domain>/auth/callback`.
-4. Run `supabase/migrations/20261101120000_creator_profiles_and_saved_analyses.sql` in the Supabase SQL editor, or apply it with the Supabase CLI.
-5. Copy `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from `.env.example` into `.env.local`. Use the publishable key (or the legacy anon key). Do not add the service-role key to this app. Restart `npm run dev` after changing environment variables.
+1. In the Supabase dashboard, open Authentication → Providers and enable Email.
+2. Under Authentication → URL configuration, set the site URL to `http://localhost:3000`. Add redirect URLs `http://localhost:3000/auth/callback` and, when you deploy, `https://<your-domain>/auth/callback`.
+3. If email confirmation is enabled, confirmation links must be allowed to return to `/auth/callback`.
+4. `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` belong in `.env.local`. Do not add a service-role or secret key. Restart `npm run dev` after changing environment variables.
 
-Email confirmation and Google sign-in both return to `/auth/callback`. The app then continues only to a same-site path. Protected pages and `/api/profile` and `/api/analyses` read the user id from the verified session. A user id in the request body is rejected.
-
-Automated tests cover those application checks and the migration text. They do not connect to a live Supabase project, so Google OAuth, email delivery, and the database policies are not verified until the steps above are finished in your project.
+After login, the app opens a same-site path, defaulting to `/dashboard`. Protected pages read the user from the verified session cookie. Automated tests cover that application behavior. They do not create a live Supabase user, so email delivery still needs to be checked in your project.
 
 ## Deploy publicly
 
@@ -59,11 +56,11 @@ Automated tests cover those application checks and the migration text. They do n
 - AI mode can still make extraction mistakes; users must validate against the original contract.
 - Doesn't estimate fair market value, import platform analytics, or ingest actual comparable deal data.
 - Not legal advice, and no contract document parsing yet.
-- Accounts and saved analyses require a configured Supabase project and the migration in this repo. The in-memory analysis rate limit is per server process.
+- Accounts require the Supabase URL and publishable key. The in-memory analysis rate limit is per server process. Analyses are not saved to an account.
 
 ## Next milestones
 
-1. Confirm the Supabase migration and OAuth redirect URLs in the live project.
+1. Confirm the Supabase site URL and `/auth/callback` redirect in the live project.
 2. Add documents and screenshots with privacy controls.
 3. Introduce a versioned benchmark library and creator historical-deal table with sources, rights normalization, sample sizes and recency.
 4. Add explainable pricing scenarios based on creator-chosen floors and evidence-backed comparables.

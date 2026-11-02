@@ -27,6 +27,13 @@ describe('secret handling', () => {
     expect(result).toEqual({ ok: false, reason: 'service-role' });
   });
 
+  it('reads publishable env vars with static access so the browser bundle can see them', () => {
+    const source = readFileSync(path.join(process.cwd(), 'lib/supabase/env.ts'), 'utf8');
+    expect(source).toContain('process.env.NEXT_PUBLIC_SUPABASE_URL');
+    expect(source).toContain('process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
+    expect(source).toContain('process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  });
+
   it('does not read a service-role variable or put the Anthropic key in client code', () => {
     const files = sourceFiles(process.cwd());
     const offenders = files.filter((file) => {

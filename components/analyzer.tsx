@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import {
   ArrowRight,
   Check,
@@ -16,20 +15,17 @@ import {
 import { AnalysisResults } from './analysis-results';
 import { EXAMPLE, HLTH_CODE_EXAMPLE, type Analysis } from '../lib/analyzer';
 
-export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean }) {
+export default function Analyzer() {
   const [offer, setOffer] = useState('');
   const [data, setData] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
 
   async function analyze() {
     setLoading(true);
     setError('');
     setData(null);
-    setSaveMessage('');
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -51,26 +47,6 @@ export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean
     await navigator.clipboard.writeText(data.draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function save() {
-    if (!data) return;
-    setSaving(true);
-    setSaveMessage('');
-    try {
-      const res = await fetch('/api/analyses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offer, analysis: data }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw Error(body.error || 'Could not save this analysis.');
-      setSaveMessage('Saved to your dashboard.');
-    } catch (caught) {
-      setSaveMessage(caught instanceof Error ? caught.message : 'Could not save this analysis.');
-    } finally {
-      setSaving(false);
-    }
   }
 
   return (
@@ -146,14 +122,6 @@ export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean
                 <pre>{data.draft}</pre>
               </div>
               <div className="footnote">{data.mode === 'ai' ? 'Claude AI' : 'Rule-based demo'} analysis · No verified market comparables included · Not legal or financial advice.</div>
-              <div className="saverow">
-                {isAuthenticated ? (
-                  <button type="button" className="copy" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save to dashboard'}</button>
-                ) : (
-                  <p className="savehint"><Link href="/login?next=/">Sign in</Link> to save this analysis to your dashboard.</p>
-                )}
-                {saveMessage && <p className="savehint" role="status">{saveMessage}</p>}
-              </div>
             </>
           )}
         </div>

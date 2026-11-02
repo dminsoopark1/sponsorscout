@@ -16,7 +16,7 @@ export function userFromClaims(claims: ClaimsLike): VerifiedUser | null {
   return { id: claims.sub, email };
 }
 
-const PROTECTED_PREFIXES = ['/dashboard', '/account', '/api/profile', '/api/analyses'];
+const PROTECTED_PREFIXES = ['/dashboard', '/account'];
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

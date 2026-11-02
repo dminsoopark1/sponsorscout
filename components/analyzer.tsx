@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
-  AlertTriangle,
   Check,
   Clipboard,
   FileText,
@@ -14,7 +13,8 @@ import {
   ChevronRight,
   LockKeyhole,
 } from 'lucide-react';
-import { EXAMPLE, FIELD_LABELS, type Analysis } from '../lib/analyzer';
+import { AnalysisResults } from './analysis-results';
+import { EXAMPLE, HLTH_CODE_EXAMPLE, type Analysis } from '../lib/analyzer';
 
 export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean }) {
   const [offer, setOffer] = useState('');
@@ -105,7 +105,10 @@ export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean
           />
           <div className="inputfooter">
             <span>{offer.length.toLocaleString()} / 12,000 characters</span>
-            <button className="textbtn" onClick={() => setOffer(EXAMPLE)}>Try an example <ChevronRight size={13} /></button>
+            <div className="example-links">
+              <button className="textbtn" onClick={() => setOffer(EXAMPLE)}>Try Postmates example <ChevronRight size={13} /></button>
+              <button className="textbtn" onClick={() => setOffer(HLTH_CODE_EXAMPLE)}>Try HLTH Code example <ChevronRight size={13} /></button>
+            </div>
           </div>
           <button className="primary" onClick={analyze} disabled={loading || offer.trim().length < 20}>
             {loading ? 'Analyzing offer...' : <>Analyze this offer <ArrowRight size={18} /></>}
@@ -133,55 +136,8 @@ export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean
               <div className="emptybars"><div /><div /><div /></div>
             </div>
           ) : (
-            <div className="resultcontent">
-              <div className={'modebanner ' + (data.mode === 'ai' ? 'ai' : 'demo')}><span className="dot" />Analysis mode: {data.mode === 'ai' ? 'Claude AI' : 'Rule-based demo'}</div>
-              <div className="summary">
-                <div className="muted caps">BRAND / PROPOSAL</div>
-                <div className="resultbrand">{data.brand}</div>
-                <div className="metrics">
-                  <div><small>OFFERED</small><strong>{data.offered === null ? 'Not stated' : `$${data.offered.toLocaleString()}`}</strong></div>
-                  <div><small>PLATFORM</small><strong>{data.platform}</strong></div>
-                  <div><small>PRICE EVIDENCE</small><strong className="amber">{data.confidence}</strong></div>
-                </div>
-              </div>
-              <div className="section">
-                <h3>Deliverables</h3>
-                {data.deliverables.map((item, index) => <div className="line" key={index}><Check size={16} />{item}</div>)}
-              </div>
-              <div className="section">
-                <h3>Rights & terms</h3>
-                <div className="term"><span>Paid usage</span><b>{data.paidRights}</b></div>
-                <div className="term"><span>Organic usage</span><b>{data.organicRights}</b></div>
-                <div className="term"><span>Exclusivity</span><b>{data.exclusivity}</b></div>
-              </div>
-              <div className="section">
-                <h3>Evidence quotes</h3>
-                {data.fieldEvidence.map((item, index) => (
-                  <div className="term" key={index}>
-                    <span>{FIELD_LABELS[item.field]}</span>
-                    <b className={item.status === 'unknown' ? 'amber' : undefined}>{item.status === 'unknown' || !item.quote ? 'Unknown — not stated' : `“${item.quote}”`}</b>
-                  </div>
-                ))}
-              </div>
-              {data.risks.length > 0 && (
-                <div className="section">
-                  <h3>Flags to review</h3>
-                  {data.risks.map((risk, index) => (
-                    <div className={'risk ' + risk.level} key={index}>
-                      <AlertTriangle size={17} />
-                      <div><strong>{risk.title}</strong><p>{risk.detail}</p></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="section">
-                <h3>Recommended approach</h3>
-                <p className="bodycopy">{data.recommendation}</p>
-              </div>
-              <div className="section">
-                <h3>Clarify before pricing</h3>
-                <ul className="missing">{data.missing.map((item, index) => <li key={index}>{item}</li>)}</ul>
-              </div>
+            <>
+              <AnalysisResults data={data} />
               <div className="section draft">
                 <div className="drafthead">
                   <h3>Reply draft</h3>
@@ -198,7 +154,7 @@ export default function Analyzer({ isAuthenticated }: { isAuthenticated: boolean
                 )}
                 {saveMessage && <p className="savehint" role="status">{saveMessage}</p>}
               </div>
-            </div>
+            </>
           )}
         </div>
       </section>

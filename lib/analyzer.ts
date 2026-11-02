@@ -2,41 +2,87 @@ import { z } from 'zod';
 
 export const EXAMPLE = `Hi! We're reaching out about an upcoming Postmates creator campaign. We'd love to offer $250 for one Instagram Reel and three Instagram Story frames OR one TikTok post. We require organic usage rights in perpetuity and paid advertising usage rights in perpetuity. Please let us know if you're interested!`;
 
-export const packageItemSchema = z.object({
-  description: z.string(),
-  quantity: z.number().nullable(),
-  platform: z.enum(['Instagram', 'TikTok', 'YouTube', 'Other', 'Unspecified']),
-});
+export const HLTH_CODE_EXAMPLE = `Hi! We're HLTH Code. We'd love to send you one complimentary bag of our meal shake. In exchange, please create 1 Instagram Reel AND 2 Instagram Stories. Please include your unique affiliate link and coupon code in the Stories. You'll earn a 20% commission on qualifying new-customer orders, and your followers receive 15% off. Please post within 14 days of receiving the product. There may be opportunities for future paid partnerships, but those are not guaranteed.`;
 
-export const packageSchema = z.object({
-  label: z.string(),
-  isOrAlternative: z.boolean(),
-  items: z.array(packageItemSchema),
-});
+export const DEFAULT_CREATOR_PREFERENCES = {
+  compensationStructure: 'guaranteed_flat_fee' as const,
+};
 
-export const fieldEvidenceSchema = z.object({
-  field: z.enum([
-    'brand',
-    'compensation',
-    'deliverables',
-    'platform',
-    'organicRights',
-    'paidRights',
-    'exclusivity',
-  ]),
-  status: z.enum(['extracted', 'unknown']),
+export type CreatorPreferences = typeof DEFAULT_CREATOR_PREFERENCES;
+
+const platformSchema = z.enum(['Instagram', 'TikTok', 'YouTube', 'Other', 'Unspecified']);
+const compensationModelSchema = z.enum(['flat_fee', 'affiliate', 'gifted', 'hybrid', 'unknown']);
+const evidenceFieldSchema = z.enum([
+  'brand',
+  'guaranteedCash',
+  'commission',
+  'commissionConditions',
+  'followerDiscount',
+  'giftedProduct',
+  'futurePaidOpportunities',
+  'deliverables',
+  'affiliateRequirements',
+  'deadline',
+  'organicUsage',
+  'paidUsage',
+  'exclusivity',
+]);
+
+export const evidenceItemSchema = z.object({
+  field: evidenceFieldSchema,
   quote: z.string().nullable(),
+});
+
+export const deliverableSchema = z.object({
+  platform: platformSchema,
+  format: z.string(),
+  quantity: z.number().nullable(),
+  requirements: z.string().nullable(),
+  affiliateLinkRequired: z.boolean(),
+  couponCodeRequired: z.boolean(),
+});
+
+export const deliverableGroupSchema = z.object({
+  label: z.string(),
+  relation: z.enum(['required', 'and', 'or']),
+  items: z.array(deliverableSchema).min(1),
+});
+
+export const rightsTermSchema = z.object({
+  specified: z.boolean(),
+  duration: z.string().nullable(),
+  summary: z.string(),
+});
+
+export const deadlineSchema = z.object({
+  relativeDuration: z.string().nullable(),
+  triggeringEvent: z.string().nullable(),
+  absoluteDate: z.string().nullable(),
+  display: z.string(),
 });
 
 export const extractedAnalysisSchema = z.object({
   brand: z.string(),
-  offered: z.number().nullable(),
-  platform: z.enum(['Instagram', 'TikTok', 'Mixed', 'Unspecified']),
-  packages: z.array(packageSchema),
-  organicRights: z.string(),
-  paidRights: z.string(),
-  exclusivity: z.string(),
-  fieldEvidence: z.array(fieldEvidenceSchema),
+  compensationModel: compensationModelSchema,
+  guaranteedCash: z.number().nullable(),
+  commissionPercent: z.number().nullable(),
+  commissionConditions: z.string().nullable(),
+  followerDiscountPercent: z.number().nullable(),
+  giftedProduct: z.string().nullable(),
+  futurePaidOpportunities: z.object({
+    mentioned: z.boolean(),
+    guaranteed: z.boolean(),
+    summary: z.string().nullable(),
+  }),
+  deliverableGroups: z.array(deliverableGroupSchema),
+  deadline: deadlineSchema,
+  organicUsage: rightsTermSchema,
+  paidUsage: rightsTermSchema,
+  exclusivity: z.object({
+    specified: z.boolean(),
+    summary: z.string(),
+  }),
+  evidence: z.array(evidenceItemSchema),
   risks: z.array(
     z.object({
       level: z.enum(['high', 'medium', 'info']),
@@ -50,249 +96,493 @@ export const extractedAnalysisSchema = z.object({
 });
 
 export const analysisSchema = extractedAnalysisSchema.extend({
+  offered: z.number().nullable(),
+  platform: z.enum(['Instagram', 'TikTok', 'Mixed', 'Unspecified']),
   deliverables: z.array(z.string()).min(1),
-  evidence: z.array(z.string()),
+  organicRights: z.string(),
+  paidRights: z.string(),
+  exclusivityLabel: z.string(),
+  compensationModelLabel: z.string(),
+  preferenceMatch: z.object({
+    preferredModel: z.literal('guaranteed_flat_fee'),
+    matches: z.boolean(),
+    summary: z.string(),
+  }),
   confidence: z.enum(['Limited', 'Moderate']),
   mode: z.enum(['demo', 'ai']),
 });
 
-export type PackageItem = z.infer<typeof packageItemSchema>;
-export type DeliverablePackage = z.infer<typeof packageSchema>;
-export type FieldEvidence = z.infer<typeof fieldEvidenceSchema>;
+export type Deliverable = z.infer<typeof deliverableSchema>;
+export type DeliverableGroup = z.infer<typeof deliverableGroupSchema>;
+export type EvidenceItem = z.infer<typeof evidenceItemSchema>;
 export type ExtractedAnalysis = z.infer<typeof extractedAnalysisSchema>;
 export type Analysis = z.infer<typeof analysisSchema>;
+export type EvidenceField = z.infer<typeof evidenceFieldSchema>;
 
-export const FIELD_LABELS: Record<FieldEvidence['field'], string> = {
+export const COMPENSATION_MODEL_LABELS: Record<Analysis['compensationModel'], string> = {
+  flat_fee: 'Guaranteed flat fee',
+  affiliate: 'Affiliate commission',
+  gifted: 'Gifted product',
+  hybrid: 'Gifted product + affiliate commission',
+  unknown: 'Unknown',
+};
+
+export const EVIDENCE_FIELD_LABELS: Record<EvidenceField, string> = {
   brand: 'Brand',
-  compensation: 'Compensation',
+  guaranteedCash: 'Guaranteed payment',
+  commission: 'Affiliate commission',
+  commissionConditions: 'Commission eligibility',
+  followerDiscount: 'Follower discount',
+  giftedProduct: 'Gifted products',
+  futurePaidOpportunities: 'Future paid opportunities',
   deliverables: 'Deliverables',
-  platform: 'Platform',
-  organicRights: 'Organic usage',
-  paidRights: 'Paid usage',
+  affiliateRequirements: 'Affiliate link / code',
+  deadline: 'Timeline',
+  organicUsage: 'Organic usage',
+  paidUsage: 'Paid usage',
   exclusivity: 'Exclusivity',
 };
 
-export function formatDeliverables(packages: DeliverablePackage[]): string[] {
-  if (!packages.length) return ['Not clearly specified'];
-  return packages.map((pkg, index) => {
-    const joined = pkg.items
+const WORD_TO_NUMBER: Record<string, number> = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+};
+
+export function normalizeText(value: string) {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+export function quoteInSource(source: string, quote: string | null | undefined) {
+  if (!quote) return false;
+  return normalizeText(source).includes(normalizeText(quote));
+}
+
+export function evidenceForField(analysis: Analysis, field: EvidenceField) {
+  const item = analysis.evidence.find((entry) => entry.field === field && entry.quote);
+  return item?.quote ?? null;
+}
+
+export function formatDeliverables(groups: DeliverableGroup[]): string[] {
+  if (!groups.length) return ['Not clearly specified'];
+  return groups.map((group, index) => {
+    const joined = group.items
       .map((item) => {
-        if (item.quantity === null) return item.description;
-        return `${item.quantity} ${item.description}`;
+        const qty = item.quantity === null ? '' : `${item.quantity} `;
+        return `${qty}${item.platform} ${item.format}`.replace(/\s+/g, ' ').trim();
       })
-      .join(' + ');
-    const relation = index === 0 ? '' : pkg.isOrAlternative ? 'OR ' : 'AND ';
-    const andNote = pkg.items.length > 1 ? ' (AND)' : '';
-    return `${relation}${pkg.label}${andNote}: ${joined}`;
+      .join(' AND ');
+    const relation = index === 0 ? '' : group.relation === 'or' ? 'OR ' : 'AND ';
+    return `${relation}${group.label}: ${joined}`;
   });
 }
 
-export function toAnalysis(extracted: ExtractedAnalysis, mode: Analysis['mode']): Analysis {
-  const quotes = extracted.fieldEvidence
-    .filter((item) => item.status === 'extracted' && item.quote)
-    .map((item) => `${FIELD_LABELS[item.field]}: “${item.quote}”`);
+function platformsFromGroups(groups: DeliverableGroup[]): Analysis['platform'] {
+  const platforms = new Set(groups.flatMap((group) => group.items.map((item) => item.platform)));
+  platforms.delete('Unspecified');
+  platforms.delete('Other');
+  platforms.delete('YouTube');
+  if (platforms.has('Instagram') && platforms.has('TikTok')) return 'Mixed';
+  if (platforms.has('Instagram')) return 'Instagram';
+  if (platforms.has('TikTok')) return 'TikTok';
+  return 'Unspecified';
+}
+
+function compensationLabel(model: Analysis['compensationModel'], extracted: ExtractedAnalysis) {
+  if (model === 'hybrid' && extracted.giftedProduct && extracted.commissionPercent != null) {
+    return 'Gifted product + affiliate commission';
+  }
+  return COMPENSATION_MODEL_LABELS[model];
+}
+
+function preferenceMatch(
+  extracted: ExtractedAnalysis,
+  preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
+): Analysis['preferenceMatch'] {
+  const matches =
+    preferences.compensationStructure === 'guaranteed_flat_fee' &&
+    extracted.compensationModel === 'flat_fee' &&
+    extracted.guaranteedCash != null;
+  if (matches) {
+    return {
+      preferredModel: 'guaranteed_flat_fee',
+      matches: true,
+      summary: 'This offer includes guaranteed cash and matches a flat-fee preference.',
+    };
+  }
+  return {
+    preferredModel: 'guaranteed_flat_fee',
+    matches: false,
+    summary:
+      'Preference mismatch: this creator accepts guaranteed flat-fee sponsorships, and the proposal does not include guaranteed cash.',
+  };
+}
+
+export function validateEvidence(source: string, evidence: EvidenceItem[]): EvidenceItem[] {
+  const seen = new Set<EvidenceField>();
+  const validated: EvidenceItem[] = [];
+  for (const item of evidence) {
+    if (seen.has(item.field)) continue;
+    seen.add(item.field);
+    validated.push({
+      field: item.field,
+      quote: quoteInSource(source, item.quote) ? item.quote!.replace(/\s+/g, ' ').trim() : null,
+    });
+  }
+  for (const field of evidenceFieldSchema.options) {
+    if (!seen.has(field)) validated.push({ field, quote: null });
+  }
+  return validated;
+}
+
+function sanitizeExtracted(source: string, extracted: ExtractedAnalysis): ExtractedAnalysis {
+  const hasCashFigure = /\$\s?[\d,]+(?:\.\d{2})?/.test(source);
+  const guaranteedCash = hasCashFigure ? extracted.guaranteedCash : null;
+  return {
+    ...extracted,
+    guaranteedCash,
+    evidence: validateEvidence(source, extracted.evidence),
+  };
+}
+
+function buildPreferenceRecommendation(extracted: ExtractedAnalysis, match: Analysis['preferenceMatch']) {
+  if (match.matches) return extracted.recommendation;
+  const affiliateNote =
+    extracted.compensationModel === 'affiliate' || extracted.compensationModel === 'hybrid'
+      ? ' This is an affiliate/gifted proposal rather than a guaranteed flat fee. Ask for a guaranteed posting fee if you want to proceed, and keep any commission as an add-on. Do not invent a market rate.'
+      : ' Ask whether a guaranteed flat fee is available. Do not invent a market rate.';
+  if (extracted.recommendation.toLowerCase().includes('preference mismatch')) return extracted.recommendation;
+  return `${match.summary}${affiliateNote} ${extracted.recommendation}`.trim();
+}
+
+export function toAnalysis(
+  extractedInput: ExtractedAnalysis,
+  mode: Analysis['mode'],
+  source: string,
+  preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
+): Analysis {
+  const extracted = sanitizeExtracted(source, extractedInput);
+  const match = preferenceMatch(extracted, preferences);
+  const risks = [...extracted.risks];
+  if (!match.matches && !risks.some((risk) => risk.title === 'Compensation preference mismatch')) {
+    risks.unshift({
+      level: 'high',
+      title: 'Compensation preference mismatch',
+      detail: match.summary,
+    });
+  }
   return analysisSchema.parse({
     ...extracted,
-    deliverables: formatDeliverables(extracted.packages),
-    evidence: quotes.length
-      ? [...quotes, 'No verified comparable market transactions supplied']
-      : ['Offer text provided by the creator', 'No verified comparable market transactions supplied'],
+    risks,
+    recommendation: buildPreferenceRecommendation(extracted, match),
+    offered: extracted.guaranteedCash,
+    platform: platformsFromGroups(extracted.deliverableGroups),
+    deliverables: formatDeliverables(extracted.deliverableGroups),
+    organicRights: extracted.organicUsage.summary,
+    paidRights: extracted.paidUsage.summary,
+    exclusivityLabel: extracted.exclusivity.summary,
+    compensationModelLabel: compensationLabel(extracted.compensationModel, extracted),
+    preferenceMatch: match,
     confidence: 'Limited',
     mode,
   });
 }
 
-function quote(input: string, pattern: RegExp): string | null {
-  const match = input.match(pattern);
+function parseQty(raw: string | undefined, fallback: number | null) {
+  if (!raw) return fallback;
+  const keyed = WORD_TO_NUMBER[raw.toLowerCase()];
+  if (keyed) return keyed;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function snippet(source: string, pattern: RegExp) {
+  const match = source.match(pattern);
   if (!match) return null;
   return match[0].replace(/\s+/g, ' ').trim().slice(0, 220);
 }
 
-function evidenceFor(
-  field: FieldEvidence['field'],
-  snippet: string | null,
-): FieldEvidence {
-  return snippet
-    ? { field, status: 'extracted', quote: snippet }
-    : { field, status: 'unknown', quote: null };
+function evidence(field: EvidenceField, quote: string | null): EvidenceItem {
+  return { field, quote };
 }
 
-export function analyzeOffer(input: string): Analysis {
+function unspecifiedRights() {
+  return { specified: false, duration: null, summary: 'Not specified' };
+}
+
+function perpetualRights(kind: 'organic' | 'paid') {
+  return {
+    specified: true,
+    duration: 'perpetual',
+    summary: kind === 'organic' ? 'Perpetual organic usage' : 'Perpetual paid usage',
+  };
+}
+
+export function analyzeOffer(
+  input: string,
+  preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
+): Analysis {
   const s = input.toLowerCase();
-  const money = [...input.matchAll(/(?:\$\s?)([\d,]+(?:\.\d{2})?)/g)].map((m) =>
-    Number(m[1].replaceAll(',', '')),
+  const brand = /hlth\s*code/i.test(input)
+    ? 'HLTH Code'
+    : /postmates/i.test(input)
+      ? 'Postmates'
+      : (/(?:from|for|with|at)\s+([A-Z][\w&'.-]+(?:\s+[A-Z][\w&'.-]+){0,2})/.exec(input)?.[1] ||
+        'Unspecified brand');
+
+  const cashMatch = /(?:offer(?:ing)?|offered)\s+\$\s?([\d,]+(?:\.\d{2})?)|\$\s?([\d,]+(?:\.\d{2})?)\s+for\b/i.exec(
+    input,
   );
-  const brand = /postmates/i.test(input)
-    ? 'Postmates'
-    : (/(?:from|for|with|at)\s+([A-Z][\w&'.-]+(?:\s+[A-Z][\w&'.-]+){0,2})/.exec(input)?.[1] ||
-      'Unspecified brand');
-  const instagram = /instagram|\breel\b|\bstor(?:y|ies)\b/.test(s);
-  const tiktok = /tiktok/.test(s);
-  const platform: Analysis['platform'] =
-    instagram && tiktok ? 'Mixed' : instagram ? 'Instagram' : tiktok ? 'TikTok' : 'Unspecified';
+  const guaranteedCash = cashMatch ? Number((cashMatch[1] || cashMatch[2]).replaceAll(',', '')) : null;
 
-  const reelQtyMatch = /(?:(\d+|one|an|a)\s+)?(?:instagram\s+)?reels?/i.exec(input);
-  const storyQtyMatch =
-    /(\d+|one|two|three|four|five|six)\s*(?:-?\s*)?(?:frame\s+)?(?:instagram\s+)?stor(?:y|ies)/i.exec(input);
-  const tiktokQtyMatch = /(?:(\d+|one|a|an)\s+)?tiktok(?:\s+post)?/i.exec(input);
+  const commissionMatch = /(\d+(?:\.\d+)?)\s*%\s*commission/i.exec(input);
+  const commissionPercent = commissionMatch ? Number(commissionMatch[1]) : null;
+  const commissionConditions = /qualifying new-customer orders/i.test(input)
+    ? 'Qualifying new-customer orders'
+    : commissionPercent != null
+      ? 'Commission mentioned; qualifying conditions unclear'
+      : null;
+
+  const discountMatch =
+    /followers?[^\d%]{0,40}(\d+(?:\.\d+)?)\s*%/i.exec(input) || /(\d+(?:\.\d+)?)\s*%\s*off/i.exec(input);
+  const followerDiscountPercent = discountMatch ? Number(discountMatch[1]) : null;
+
+  const giftMatch = /((?:one\s+|a\s+|an\s+)?complimentary\s+[^.]{5,80}|gifted\s+[^.]{5,80})/i.exec(input);
+  const giftedProduct = giftMatch ? giftMatch[1].replace(/\s+/g, ' ').trim().replace(/\.$/, '') : null;
+
+  const futureMentioned = /future paid|paid partnership/i.test(input);
+  const futureNotGuaranteed = /not guaranteed/i.test(input);
+  const futurePaidOpportunities = {
+    mentioned: futureMentioned,
+    guaranteed: futureMentioned && !futureNotGuaranteed,
+    summary: futureMentioned
+      ? futureNotGuaranteed
+        ? 'Possible future paid partnerships, not guaranteed'
+        : 'Future paid opportunities mentioned'
+      : null,
+  };
+
   const hasOr = /\bor\b/.test(s);
+  const reelQty = parseQty(
+    /(?:(\d+|one|an|a)\s+)?(?:instagram\s+)?reels?/i.exec(input)?.[1],
+    /reel/.test(s) ? 1 : null,
+  );
+  const storyFrameQty = parseQty(
+    /(\d+|one|two|three|four|five|six)\s*(?:-?\s*)?(?:frame\s+)?(?:instagram\s+)?stor(?:y|ies)\s+frames?/i.exec(
+      input,
+    )?.[1],
+    null,
+  );
+  const storyQty = parseQty(
+    /(\d+|one|two|three|four|five|six)\s+(?:instagram\s+)?stor(?:y|ies)(?!\s+frames?)/i.exec(input)?.[1],
+    null,
+  );
+  const tiktokQty = parseQty(/(?:(\d+|one|a|an)\s+)?tiktok(?:\s+post)?/i.exec(input)?.[1], /tiktok/.test(s) ? 1 : null);
 
-  const wordToNumber: Record<string, number> = {
-    a: 1,
-    an: 1,
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-  };
-  const parseQty = (raw: string | undefined, fallback: number | null) => {
-    if (!raw) return fallback;
-    const keyed = wordToNumber[raw.toLowerCase()];
-    if (keyed) return keyed;
-    const numeric = Number(raw);
-    return Number.isFinite(numeric) ? numeric : fallback;
-  };
+  const affiliateInStories = /(?:affiliate link|coupon code)[^.]*stor(?:y|ies)|stor(?:y|ies)[^.]*affiliate link/i.test(
+    input,
+  );
+  const affiliateRequired = /affiliate link/i.test(input);
+  const couponRequired = /coupon code/i.test(input);
 
-  const packages: DeliverablePackage[] = [];
-  const igItems: PackageItem[] = [];
+  const igItems: Deliverable[] = [];
   if (/reel/.test(s)) {
     igItems.push({
-      description: 'Instagram Reel',
-      quantity: parseQty(reelQtyMatch?.[1], 1),
       platform: 'Instagram',
+      format: 'Reel',
+      quantity: reelQty,
+      requirements: null,
+      affiliateLinkRequired: affiliateRequired && !affiliateInStories,
+      couponCodeRequired: couponRequired && !affiliateInStories,
     });
   }
-  if (/stor(?:y|ies)|story frames?/.test(s)) {
+  if (storyFrameQty != null || /story frames?/i.test(input)) {
     igItems.push({
-      description: storyQtyMatch ? 'Instagram Story frames' : 'Instagram Stories (confirm number of frames)',
-      quantity: parseQty(storyQtyMatch?.[1], null),
       platform: 'Instagram',
+      format: 'Story set',
+      quantity: 1,
+      requirements: storyFrameQty ? `${storyFrameQty} frames` : 'Confirm number of frames',
+      affiliateLinkRequired: affiliateInStories || (affiliateRequired && !/reel/.test(s)),
+      couponCodeRequired: affiliateInStories || (couponRequired && !/reel/.test(s)),
+    });
+  } else if (/stor(?:y|ies)/.test(s)) {
+    igItems.push({
+      platform: 'Instagram',
+      format: 'Stories',
+      quantity: storyQty,
+      requirements: null,
+      affiliateLinkRequired: affiliateInStories || affiliateRequired,
+      couponCodeRequired: affiliateInStories || couponRequired,
     });
   }
-  const ttItems: PackageItem[] = tiktok
+  const ttItems: Deliverable[] = /tiktok/.test(s)
     ? [
         {
-          description: 'TikTok post',
-          quantity: parseQty(tiktokQtyMatch?.[1], 1),
           platform: 'TikTok',
+          format: 'Post',
+          quantity: tiktokQty,
+          requirements: null,
+          affiliateLinkRequired: false,
+          couponCodeRequired: false,
         },
       ]
     : [];
 
+  const deliverableGroups: DeliverableGroup[] = [];
   if (hasOr && igItems.length && ttItems.length) {
-    packages.push({ label: 'Option A', isOrAlternative: false, items: igItems });
-    packages.push({ label: 'Option B', isOrAlternative: true, items: ttItems });
+    deliverableGroups.push({ label: 'Option A', relation: 'required', items: igItems });
+    deliverableGroups.push({ label: 'Option B', relation: 'or', items: ttItems });
   } else {
     const items = [...igItems, ...ttItems];
-    if (items.length) packages.push({ label: 'Required package', isOrAlternative: false, items });
+    if (items.length) deliverableGroups.push({ label: 'Required package', relation: 'required', items });
   }
+
+  const deadlineMatch = /within\s+(\d+)\s+days?\s+(?:of|after)\s+(?:receiving\s+)?(?:the\s+)?product/i.exec(input);
+  const deadline = deadlineMatch
+    ? {
+        relativeDuration: `${deadlineMatch[1]} days`,
+        triggeringEvent: 'receiving the product',
+        absoluteDate: null,
+        display: `Within ${deadlineMatch[1]} days after receiving the product.`,
+      }
+    : {
+        relativeDuration: null,
+        triggeringEvent: null,
+        absoluteDate: null,
+        display: 'Not specified',
+      };
 
   const perpetual = /perpetual|in perpetuity|unlimited|forever|indefinite/.test(s);
   const mentionsPaid = /paid (?:advertis(?:ing|ements?)|media|usage|rights)|ads? (?:usage|rights)|whitelisting|spark ads/.test(
     s,
   );
-  const mentionsOrganic = /organic/.test(s);
-  const paidRights = mentionsPaid
-    ? perpetual
-      ? 'Perpetual / indefinite (verify exact clause)'
-      : 'Mentioned; duration unclear'
-    : 'Not stated';
-  const organicRights = mentionsOrganic
-    ? perpetual
-      ? 'Perpetual / indefinite (verify exact clause)'
-      : 'Mentioned; duration unclear'
-    : 'Not stated';
-  const exclusivity = /exclusiv|non.?compete/.test(s) ? 'Mentioned; scope needs review' : 'Not stated';
+  const mentionsOrganic = /organic usage/i.test(input);
+  const organicUsage = mentionsOrganic && perpetual ? perpetualRights('organic') : unspecifiedRights();
+  const paidUsage = mentionsPaid && perpetual ? perpetualRights('paid') : mentionsPaid
+    ? { specified: true, duration: null, summary: 'Paid usage mentioned; duration not specified' }
+    : unspecifiedRights();
+  const exclusivitySpecified = /exclusiv|non.?compete/.test(s);
+  const exclusivity = exclusivitySpecified
+    ? { specified: true, summary: 'Mentioned; scope needs review' }
+    : { specified: false, summary: 'Not specified' };
+
+  const hasAffiliate = commissionPercent != null || affiliateRequired;
+  const hasGift = Boolean(giftedProduct);
+  const hasCash = guaranteedCash != null;
+  const compensationModel: Analysis['compensationModel'] = hasCash && (hasAffiliate || hasGift)
+    ? 'hybrid'
+    : hasCash
+      ? 'flat_fee'
+      : hasAffiliate && hasGift
+        ? 'hybrid'
+        : hasAffiliate
+          ? 'affiliate'
+          : hasGift
+            ? 'gifted'
+            : 'unknown';
 
   const risks: Analysis['risks'] = [];
-  if (mentionsPaid && perpetual) {
+  if (paidUsage.duration === 'perpetual') {
     risks.push({
       level: 'high',
       title: 'Perpetual paid usage',
       detail:
         'The brand may be seeking indefinite advertising rights. Recommend separating the posting fee from a defined, renewable paid license.',
     });
-  } else if (mentionsPaid) {
-    risks.push({
-      level: 'medium',
-      title: 'Paid usage terms unclear',
-      detail: 'Confirm duration, placement, geography, edit rights, and whether ads run through your account.',
-    });
   }
-  if (perpetual && mentionsOrganic) {
+  if (organicUsage.duration === 'perpetual') {
     risks.push({
       level: 'medium',
       title: 'Perpetual organic usage',
       detail: 'Clarify where the brand may repost or edit your content and whether a limited license is acceptable.',
     });
   }
-  if (packages.some((pkg) => pkg.isOrAlternative)) {
+  if (deliverableGroups.some((group) => group.relation === 'or')) {
     risks.push({
       level: 'info',
       title: 'Alternative deliverable packages',
-      detail:
-        'The proposal appears to give options rather than require all deliverables. Price the alternatives separately.',
+      detail: 'The proposal appears to give options rather than require all deliverables. Price the alternatives separately.',
     });
   }
-  if (exclusivity.startsWith('Mentioned')) {
+  if (exclusivity.specified) {
     risks.push({
       level: 'medium',
       title: 'Exclusivity scope',
       detail: 'Confirm category, competing brands, territory, and term before pricing.',
     });
   }
+  if (futurePaidOpportunities.mentioned && !futurePaidOpportunities.guaranteed) {
+    risks.push({
+      level: 'info',
+      title: 'Future paid work is not guaranteed',
+      detail: 'Treat possible later paid partnerships as optional, not as part of this offer’s compensation.',
+    });
+  }
 
-  const offered = money.length ? money[0] : null;
   const missing = [
-    !money.length && 'Guaranteed compensation',
-    !packages.length && 'Specific deliverables',
+    guaranteedCash == null && 'Guaranteed cash payment',
+    !deliverableGroups.length && 'Specific deliverables',
     !mentionsPaid && 'Whether paid advertising rights are required',
-    !/\d+\s*(?:day|month|year)/.test(s) && 'Usage duration / start date',
+    !mentionsOrganic && 'Organic usage rights and duration',
+    !exclusivity.specified && 'Exclusivity terms',
+    deadline.display === 'Not specified' && 'Delivery and posting dates',
     !/revision|rounds? of edit/.test(s) && 'Revision rounds',
-    !/deadline|due date|post by|live by/.test(s) && 'Delivery and posting dates',
-    !/whitelisting|spark ads|partnership ads/.test(s) && 'Account-level ad permissions',
   ].filter(Boolean) as string[];
 
-  const recommendation =
-    mentionsPaid && perpetual
-      ? 'Counter with a base content/posting fee plus a separate 90-day paid advertising license. Offer renewal terms; request a materially higher buyout fee if perpetual rights are non-negotiable. Do not treat this as a verified market valuation.'
-      : 'Quote separately for content production, distribution, and any usage license. First confirm missing rights and scope. Use your own results and comparable completed deals to calibrate the amount.';
+  const recommendation = paidUsage.duration === 'perpetual'
+    ? 'Counter with a base content/posting fee plus a separate 90-day paid advertising license. Offer renewal terms; request a materially higher buyout fee if perpetual rights are non-negotiable. Do not treat this as a verified market valuation.'
+    : 'Quote separately for content production, distribution, and any usage license. First confirm missing rights and scope. Use your own results and comparable completed deals to calibrate the amount. Do not invent a market rate.';
 
-  const draft = `Hi,\n\nThanks for reaching out${brand !== 'Unspecified brand' ? ' about the ' + brand + ' campaign' : ''}! I’d be interested in learning more.\n\nBefore confirming a rate, could you clarify the expected deliverables, timeline, and the scope of organic and paid usage rights? I typically price content creation/posting separately from paid advertising usage, with an initial 90-day license and an option to renew.\n\nIf a limited licensing term works, I’d be happy to put together a package that fits the campaign goals.\n\nBest,\n[Your name]`;
+  const draft = `Hi,\n\nThanks for reaching out${brand !== 'Unspecified brand' ? ' about the ' + brand + ' campaign' : ''}! I’d be interested in learning more.\n\nBefore confirming, could you clarify the expected deliverables, timeline, and whether a guaranteed flat fee is available in addition to any gifted product or affiliate commission? I typically price content creation/posting separately from paid advertising usage.\n\nBest,\n[Your name]`;
 
-  const fieldEvidence: FieldEvidence[] = [
-    evidenceFor('brand', quote(input, /Postmates|[A-Z][\w&'.-]+(?:\s+[A-Z][\w&'.-]+){0,2} creator campaign/)),
-    evidenceFor('compensation', quote(input, /\$\s?[\d,]+(?:\.\d{2})?/)),
-    evidenceFor(
-      'deliverables',
-      quote(
-        input,
-        /(?:one |an |a |\d+\s+)?(?:Instagram Reel|TikTok post)[\s\S]{0,80}?(?:OR one TikTok post|TikTok post|Instagram Reel)/i,
-      ) || quote(input, /Instagram Reel|TikTok post|Story frames?/i),
-    ),
-    evidenceFor('platform', quote(input, /Instagram|TikTok/i)),
-    evidenceFor('organicRights', quote(input, /organic usage rights[^.]{0,60}/i)),
-    evidenceFor('paidRights', quote(input, /paid advertising usage rights[^.]{0,60}/i)),
-    evidenceFor('exclusivity', quote(input, /exclusiv(?:e|ity)|non-?compete/i)),
-  ];
+  const extracted: ExtractedAnalysis = {
+    brand,
+    compensationModel,
+    guaranteedCash,
+    commissionPercent,
+    commissionConditions,
+    followerDiscountPercent,
+    giftedProduct,
+    futurePaidOpportunities,
+    deliverableGroups,
+    deadline,
+    organicUsage,
+    paidUsage,
+    exclusivity,
+    evidence: [
+      evidence('brand', snippet(input, /HLTH Code|Postmates/i)),
+      evidence('guaranteedCash', snippet(input, /\$\s?[\d,]+(?:\.\d{2})?/)),
+      evidence('commission', snippet(input, /\d+(?:\.\d+)?%\s*commission[^.]{0,60}/i)),
+      evidence('commissionConditions', snippet(input, /qualifying new-customer orders/i)),
+      evidence('followerDiscount', snippet(input, /followers[^.]*\d+(?:\.\d+)?%\s*off|\d+(?:\.\d+)?%\s*off/i)),
+      evidence('giftedProduct', snippet(input, /(?:one\s+|a\s+|an\s+)?complimentary\s+[^.]{5,80}/i)),
+      evidence(
+        'futurePaidOpportunities',
+        snippet(input, /future paid partnerships?[^.]{0,40}not guaranteed|not guaranteed/i),
+      ),
+      evidence(
+        'deliverables',
+        snippet(
+          input,
+          /1 Instagram Reel AND 2 Instagram Stories|one Instagram Reel and three Instagram Story frames OR one TikTok post/i,
+        ) || snippet(input, /Instagram Reel|TikTok post|Instagram Stories/i),
+      ),
+      evidence('affiliateRequirements', snippet(input, /affiliate link and coupon code in the Stories/i)),
+      evidence('deadline', snippet(input, /within\s+\d+\s+days?\s+(?:of|after)\s+(?:receiving\s+)?(?:the\s+)?product/i)),
+      evidence('organicUsage', snippet(input, /organic usage rights in perpetuity/i)),
+      evidence('paidUsage', snippet(input, /paid advertising usage rights in perpetuity/i)),
+      evidence('exclusivity', snippet(input, /exclusiv(?:e|ity)|non-?compete/i)),
+    ],
+    risks,
+    missing,
+    recommendation,
+    draft,
+  };
 
-  return toAnalysis(
-    {
-      brand,
-      offered,
-      platform,
-      packages,
-      organicRights,
-      paidRights,
-      exclusivity,
-      fieldEvidence,
-      risks,
-      missing,
-      recommendation,
-      draft,
-    },
-    'demo',
-  );
+  return toAnalysis(extracted, 'demo', input, preferences);
 }

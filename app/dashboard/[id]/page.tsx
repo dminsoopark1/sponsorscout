@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { AnalysisResults } from '../../../components/analysis-results';
 import { isUuid } from '../../../lib/auth/user';
 import { requireUser } from '../../../lib/auth/session';
 import { getSavedAnalysis } from '../../../lib/data/analyses';
@@ -41,17 +42,7 @@ export default async function SavedAnalysisPage({ params }: { params: Promise<{ 
           <button className="copy" type="submit">Delete</button>
         </form>
       </div>
-      <section className="summary">
-        <div className="metrics">
-          <div><small>OFFERED</small><strong>{analysis.offered === null ? 'Not stated' : `$${analysis.offered.toLocaleString()}`}</strong></div>
-          <div><small>PLATFORM</small><strong>{analysis.platform}</strong></div>
-          <div><small>PRICE EVIDENCE</small><strong className="amber">{analysis.confidence}</strong></div>
-        </div>
-      </section>
-      <section className="section">
-        <h3>Deliverables</h3>
-        {analysis.deliverables.map((item) => <p className="bodycopy" key={item}>{item}</p>)}
-      </section>
+      <AnalysisResults data={analysis} />
       <section className="section">
         <h3>Reply draft</h3>
         <pre>{analysis.draft}</pre>

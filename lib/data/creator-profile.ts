@@ -9,25 +9,74 @@ import {
 export const SOCIAL_PLATFORMS = ['Instagram', 'TikTok', 'YouTube', 'Other'] as const;
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
+export const NUMERIC_FIELD_LABELS: Record<string, string> = {
+  followerCount: 'Followers',
+  medianVideoViews: 'Median video views',
+  averageVideoViews: 'Average video views',
+  engagementRate: 'Engagement rate',
+  averageWatchTimeSeconds: 'Average watch time',
+  averageVideoDurationSeconds: 'Average duration',
+  minimumGuaranteedFee: 'Minimum guaranteed fee',
+};
+
+export type ParsedOptionalNumber =
+  | { ok: true; value: number | null }
+  | { ok: false; error: string; field?: string };
+
+export function parseOptionalNumber(
+  value: unknown,
+  options: { max?: number; field?: string } = {},
+): ParsedOptionalNumber {
+  const label = options.field ? NUMERIC_FIELD_LABELS[options.field] ?? options.field : 'This field';
+  const fail = (message: string): ParsedOptionalNumber => ({
+    ok: false,
+    error: `${label}: ${message}`,
+    field: options.field,
+  });
+
+  if (value === '' || value === null || value === undefined) return { ok: true, value: null };
+  if (typeof value === 'string' && value.trim() === '') return { ok: true, value: null };
+
+  let numeric: number;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (typeof value === 'string') {
+    const cleaned = value.trim().replace(/,/g, '');
+    if (!cleaned) return { ok: true, value: null };
+    if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(cleaned)) return fail('Enter a valid number.');
+    numeric = Number(cleaned);
+  } else {
+    return fail('Enter a valid number.');
+  }
+
+  if (!Number.isFinite(numeric)) return fail('Enter a finite number.');
+  if (numeric < 0) return fail('Must be zero or greater.');
+  if (options.max != null && numeric > options.max) return fail(`Must be between 0 and ${options.max}.`);
+  return { ok: true, value: numeric };
+}
+
 const optionalText = (max: number) =>
   z.preprocess((value) => {
     if (value === '' || value === null || value === undefined) return null;
     return typeof value === 'string' ? value.trim() : value;
   }, z.string().max(max).nullable());
 
-const optionalNonneg = z.preprocess((value) => {
-  if (value === '' || value === null || value === undefined) return null;
-  if (typeof value === 'string' && value.trim() === '') return null;
-  const numeric = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(numeric) ? numeric : value;
-}, z.number().nonnegative().nullable());
+function optionalNumericSchema(field: string, max?: number) {
+  return z
+    .unknown()
+    .optional()
+    .transform((value, ctx) => {
+      const parsed = parseOptionalNumber(value === undefined ? null : value, { field, max });
+      if (!parsed.ok) {
+        ctx.addIssue({ code: 'custom', message: parsed.error });
+        return z.NEVER;
+      }
+      return parsed.value;
+    });
+}
 
-const optionalPercent = z.preprocess((value) => {
-  if (value === '' || value === null || value === undefined) return null;
-  if (typeof value === 'string' && value.trim() === '') return null;
-  const numeric = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(numeric) ? numeric : value;
-}, z.number().min(0).max(100).nullable());
+const optionalNonneg = (field: string) => optionalNumericSchema(field);
+const optionalPercent = (field: string) => optionalNumericSchema(field, 100);
 
 const urlSchema = z.preprocess((value) => {
   if (value === '' || value === null || value === undefined) return null;
@@ -41,12 +90,12 @@ export const breakdownItemSchema = z.object({
 });
 
 export const metricsInputSchema = z.object({
-  followerCount: optionalNonneg,
-  medianVideoViews: optionalNonneg,
-  averageVideoViews: optionalNonneg,
-  engagementRate: optionalPercent,
-  averageWatchTimeSeconds: optionalNonneg,
-  averageVideoDurationSeconds: optionalNonneg,
+  followerCount: optionalNonneg('followerCount'),
+  medianVideoViews: optionalNonneg('medianVideoViews'),
+  averageVideoViews: optionalNonneg('averageVideoViews'),
+  engagementRate: optionalPercent('engagementRate'),
+  averageWatchTimeSeconds: optionalNonneg('averageWatchTimeSeconds'),
+  averageVideoDurationSeconds: optionalNonneg('averageVideoDurationSeconds'),
   metricsWindow: optionalText(80),
 });
 
@@ -72,7 +121,7 @@ export const accountInputSchema = z.object({
 
 export const preferencesInputSchema = z.object({
   compensationPreference: z.enum(['flat_fee', 'hybrid', 'affiliate_allowed']),
-  minimumGuaranteedFee: optionalNonneg,
+  minimumGuaranteedFee: optionalNonneg('minimumGuaranteedFee'),
   preferredCurrency: z.string().trim().min(3).max(8).default('USD'),
   acceptsGiftedOnly: z.boolean(),
   acceptsAffiliateLinks: z.boolean(),
@@ -150,7 +199,13 @@ export function parseProfileSave(body: unknown) {
   const parsed = profileSaveSchema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    return { ok: false as const, error: issue?.message || 'Check the profile fields and try again.' };
+    const field = issue?.path?.length ? issue.path.join('.') : undefined;
+    const leaf = issue?.path?.length ? String(issue.path[issue.path.length - 1]) : undefined;
+    const labeled =
+      leaf && NUMERIC_FIELD_LABELS[leaf] && issue.message && !issue.message.startsWith(NUMERIC_FIELD_LABELS[leaf])
+        ? `${NUMERIC_FIELD_LABELS[leaf]}: ${issue.message}`
+        : issue?.message || 'Check the profile fields and try again.';
+    return { ok: false as const, error: labeled, field };
   }
   return { ok: true as const, data: parsed.data };
 }

@@ -9,6 +9,7 @@ import {
   EMPTY_PROFILE,
   formatCreatorContext,
   getCreatorProfileBundle,
+  parseOptionalNumber,
   parseProfileSave,
   saveCreatorProfileBundle,
 } from '../lib/data/creator-profile';
@@ -87,6 +88,63 @@ describe('creator profile validation', () => {
     if (parsed.ok) {
       expect(parsed.data.accounts[0].metrics?.followerCount).toBeNull();
       expect(parsed.data.accounts[0].profileUrl).toBeNull();
+    }
+  });
+
+  it('parses comma-formatted, plain, and decimal numbers without turning blanks into zero', () => {
+    expect(parseOptionalNumber('12,200', { field: 'followerCount' })).toEqual({ ok: true, value: 12200 });
+    expect(parseOptionalNumber(12200, { field: 'followerCount' })).toEqual({ ok: true, value: 12200 });
+    expect(parseOptionalNumber('4.2', { field: 'engagementRate', max: 100 })).toEqual({ ok: true, value: 4.2 });
+    expect(parseOptionalNumber('', { field: 'medianVideoViews' })).toEqual({ ok: true, value: null });
+    expect(parseOptionalNumber('   ', { field: 'averageVideoViews' })).toEqual({ ok: true, value: null });
+    expect(parseOptionalNumber(0, { field: 'followerCount' })).toEqual({ ok: true, value: 0 });
+    expect(parseOptionalNumber('1,200.5', { field: 'averageWatchTimeSeconds' })).toEqual({ ok: true, value: 1200.5 });
+    expect(parseOptionalNumber('abc', { field: 'followerCount' }).ok).toBe(false);
+    expect(parseOptionalNumber('-1', { field: 'followerCount' }).ok).toBe(false);
+    expect(parseOptionalNumber(Number.NaN, { field: 'followerCount' }).ok).toBe(false);
+    expect(parseOptionalNumber(Number.POSITIVE_INFINITY, { field: 'followerCount' }).ok).toBe(false);
+    expect(parseOptionalNumber('150', { field: 'engagementRate', max: 100 }).ok).toBe(false);
+    expect(parseOptionalNumber('abc', { field: 'followerCount' })).toMatchObject({
+      error: expect.stringContaining('Followers'),
+      field: 'followerCount',
+    });
+
+    const parsed = parseProfileSave({
+      ...validProfile,
+      preferences: { ...validProfile.preferences, minimumGuaranteedFee: '1,500' },
+      accounts: [
+        {
+          ...validProfile.accounts[0],
+          metrics: {
+            ...validProfile.accounts[0].metrics,
+            followerCount: '12,200',
+            medianVideoViews: '2,400',
+            averageVideoViews: 3000,
+            engagementRate: '4.2',
+            averageWatchTimeSeconds: '',
+            averageVideoDurationSeconds: null,
+          },
+        },
+      ],
+    });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.data.preferences.minimumGuaranteedFee).toBe(1500);
+      expect(parsed.data.accounts[0].metrics?.followerCount).toBe(12200);
+      expect(parsed.data.accounts[0].metrics?.medianVideoViews).toBe(2400);
+      expect(parsed.data.accounts[0].metrics?.engagementRate).toBe(4.2);
+      expect(parsed.data.accounts[0].metrics?.averageWatchTimeSeconds).toBeNull();
+      expect(parsed.data.accounts[0].metrics?.averageVideoDurationSeconds).toBeNull();
+    }
+
+    const invalid = parseProfileSave({
+      ...validProfile,
+      accounts: [{ ...validProfile.accounts[0], metrics: { ...validProfile.accounts[0].metrics, followerCount: 'twelve thousand' } }],
+    });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.error).toMatch(/Followers/i);
+      expect(invalid.field).toContain('followerCount');
     }
   });
 });

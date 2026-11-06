@@ -40,7 +40,12 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Provide a JSON profile payload.' }, { status: 400 });
   }
   const parsed = parseProfileSave(body);
-  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.error, field: 'field' in parsed ? parsed.field : undefined },
+      { status: 400 },
+    );
+  }
   try {
     const supabase = await createClient();
     const saved = await saveCreatorProfileBundle(supabase, user.id, parsed.data);

@@ -1,12 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type {
-  CreatorProfileBundle,
-  DemographicsInput,
-  SavedAccount,
+import {
+  parseOptionalNumber,
+  SOCIAL_PLATFORMS,
+  type CreatorProfileBundle,
+  type DemographicsInput,
+  type SavedAccount,
+  type SocialPlatform,
 } from '../lib/data/creator-profile';
-import { SOCIAL_PLATFORMS, type SocialPlatform } from '../lib/data/creator-profile';
 
 type AccountDraft = {
   key: string;
@@ -66,8 +68,10 @@ function parseBreakdown(value: string): DemographicsInput['countryBreakdown'] {
   });
 }
 
-function emptyNumber(value: string) {
-  return value.trim() === '' ? null : value;
+function numberField(value: string, field: string, percent = false) {
+  const parsed = parseOptionalNumber(value, { field, max: percent ? 100 : undefined });
+  if (!parsed.ok) throw new Error(parsed.error);
+  return parsed.value;
 }
 
 export function CreatorProfileForm({
@@ -113,7 +117,8 @@ export function CreatorProfileForm({
     setSaving(true);
     setError('');
     setMessage('');
-    const payload = {
+    try {
+      const payload = {
       displayName,
       creatorName,
       primaryNiche,
@@ -125,7 +130,7 @@ export function CreatorProfileForm({
       bio,
       preferences: {
         compensationPreference: compensation,
-        minimumGuaranteedFee: emptyNumber(minimumFee),
+        minimumGuaranteedFee: numberField(minimumFee, 'minimumGuaranteedFee'),
         preferredCurrency: currency,
         acceptsGiftedOnly,
         acceptsAffiliateLinks,
@@ -137,12 +142,12 @@ export function CreatorProfileForm({
         handle: account.handle,
         profileUrl: account.profileUrl,
         metrics: {
-          followerCount: emptyNumber(account.followerCount),
-          medianVideoViews: emptyNumber(account.medianVideoViews),
-          averageVideoViews: emptyNumber(account.averageVideoViews),
-          engagementRate: emptyNumber(account.engagementRate),
-          averageWatchTimeSeconds: emptyNumber(account.averageWatchTimeSeconds),
-          averageVideoDurationSeconds: emptyNumber(account.averageVideoDurationSeconds),
+          followerCount: numberField(account.followerCount, 'followerCount'),
+          medianVideoViews: numberField(account.medianVideoViews, 'medianVideoViews'),
+          averageVideoViews: numberField(account.averageVideoViews, 'averageVideoViews'),
+          engagementRate: numberField(account.engagementRate, 'engagementRate', true),
+          averageWatchTimeSeconds: numberField(account.averageWatchTimeSeconds, 'averageWatchTimeSeconds'),
+          averageVideoDurationSeconds: numberField(account.averageVideoDurationSeconds, 'averageVideoDurationSeconds'),
           metricsWindow: account.metricsWindow,
         },
         demographics: {
@@ -152,7 +157,6 @@ export function CreatorProfileForm({
         },
       })),
     };
-    try {
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

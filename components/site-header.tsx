@@ -21,6 +21,7 @@ export async function SiteHeader() {
             <summary>Account</summary>
             <div className="accountmenu-panel">
               <Link href="/dashboard">Dashboard</Link>
+              <Link href="/profile">Creator Profile</Link>
               <Link href="/account">Account</Link>
               <form action="/auth/signout" method="post">
                 <button type="submit">Log out</button>

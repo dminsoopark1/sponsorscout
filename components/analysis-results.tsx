@@ -87,6 +87,9 @@ export function AnalysisResults({ data }: { data: Analysis }) {
         <span className="dot" />
         Analysis mode: {data.mode === 'ai' ? 'Claude AI' : 'Rule-based demo'}
       </div>
+      {data.creatorContextUsed && data.creatorContextNote ? (
+        <p className="note">{data.creatorContextNote}</p>
+      ) : null}
 
       <div className="section first">
         <h3>Deal overview</h3>
@@ -97,7 +100,7 @@ export function AnalysisResults({ data }: { data: Analysis }) {
           <Fact label="Guaranteed cash" value={money(data.guaranteedCash)} quote={quote('guaranteedCash')} />
           <Fact
             label="Matches preferred structure"
-            value={data.preferenceMatch.matches ? 'Yes — guaranteed flat fee' : 'No — preference mismatch'}
+            value={data.preferenceMatch.matches ? `Yes — ${data.preferenceMatch.preferredModel.replaceAll('_', ' ')}` : 'No — preference mismatch'}
             quote={null}
           />
         </div>

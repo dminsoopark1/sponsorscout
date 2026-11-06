@@ -12,6 +12,8 @@ describe('protected routes', () => {
     expect(isProtectedPath('/dashboard')).toBe(true);
     expect(isProtectedPath('/dashboard/abc')).toBe(true);
     expect(isProtectedPath('/account')).toBe(true);
+    expect(isProtectedPath('/profile')).toBe(true);
+    expect(isProtectedPath('/api/profile')).toBe(true);
     expect(isProtectedPath('/api/analyze')).toBe(false);
     expect(isProtectedPath('/signup')).toBe(false);
   });
@@ -19,6 +21,8 @@ describe('protected routes', () => {
   it('sends anonymous visitors to login and leaves the analyzer public', () => {
     expect(proxyAccessDecision('/dashboard', null)).toBe('login');
     expect(proxyAccessDecision('/account', null)).toBe('login');
+    expect(proxyAccessDecision('/profile', null)).toBe('login');
+    expect(proxyAccessDecision('/api/profile', null)).toBe('api-401');
     expect(proxyAccessDecision('/', null)).toBe('continue');
     expect(proxyAccessDecision('/api/analyze', null)).toBe('continue');
     expect(proxyAccessDecision('/login', null)).toBe('continue');

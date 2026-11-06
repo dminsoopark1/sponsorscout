@@ -22,12 +22,13 @@ Set `ANTHROPIC_API_KEY` in `.env.local`. The server-side `/api/analyze` handler 
 
 ## Accounts
 
-Guests can analyze offers without an account. Email sign-up and login use Supabase Auth. `/dashboard` and `/account` require a signed-in session. Analyses are not stored on the account.
+Guests can analyze offers without an account. Email sign-up and login use Supabase Auth. `/dashboard`, `/account`, and `/profile` require a signed-in session. Analyses are not stored on the account. Signed-in analyses can use a saved creator profile as self-reported context.
 
 1. In the Supabase dashboard, open Authentication → Providers and enable Email.
 2. Under Authentication → URL configuration, set the site URL to `http://localhost:3000`. Add redirect URLs `http://localhost:3000/auth/callback` and, when you deploy, `https://<your-domain>/auth/callback`.
 3. If email confirmation is enabled, confirmation links must be allowed to return to `/auth/callback`.
 4. `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` belong in `.env.local`. Do not add a service-role or secret key. Restart `npm run dev` after changing environment variables.
+5. Apply `supabase/migrations/20261106000000_creator_profiles_v06.sql` in the SQL editor (or `supabase db push` / `supabase migration up` if you use the CLI). This creates creator profile, social account, metrics, demographics, and preference tables with row-level security. No dashboard extra is required beyond running that SQL.
 
 After login, the app opens a same-site path, defaulting to `/dashboard`. Protected pages read the user from the verified session cookie. Automated tests cover that application behavior. They do not create a live Supabase user, so email delivery still needs to be checked in your project.
 
@@ -56,7 +57,7 @@ After login, the app opens a same-site path, defaulting to `/dashboard`. Protect
 - AI mode can still make extraction mistakes; users must validate against the original contract.
 - Doesn't estimate fair market value, import platform analytics, or ingest actual comparable deal data.
 - Not legal advice, and no contract document parsing yet.
-- Accounts require the Supabase URL and publishable key. The in-memory analysis rate limit is per server process. Analyses are not saved to an account.
+- Accounts require the Supabase URL and publishable key. The in-memory analysis rate limit is per server process. Analyses are not saved to an account. Creator metrics are self-reported until a platform API is connected.
 
 ## Next milestones
 

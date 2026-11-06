@@ -8,9 +8,12 @@ import {
   extractedAnalysisSchema,
   toAnalysis,
   type Analysis,
+  type CreatorPreferences,
 } from '../../../lib/analyzer';
 import { getVerifiedUser } from '../../../lib/auth/session';
+import { formatCreatorContext, getCreatorProfileBundle } from '../../../lib/data/creator-profile';
 import { clientIp, takeAnalysisToken } from '../../../lib/rate-limit';
+import { createClient } from '../../../lib/supabase/server';
 
 const requestSchema = z.object({ offer: z.string().trim().min(20).max(12000) });
 
@@ -47,6 +50,7 @@ Evidence:
 Recommendations:
 - Do not invent fair-market prices or dollar counters.
 - If there is no guaranteed cash and the offer is affiliate/gifted, say that this does not match a guaranteed flat-fee preference and recommend asking for a flat fee without naming a number.
+- If creator profile context is supplied, use it only as self-reported background. Do not invent a rate from follower counts. Do not fill in missing metrics. Distinguish manual/self-reported statistics from verified API statistics.
 - Flag perpetual paid advertising rights. Do not give definitive legal advice.`;
 
 function json(data: Analysis, extra?: Record<string, string>) {
@@ -79,9 +83,28 @@ export async function POST(req: NextRequest) {
       );
     }
     const offer = payload.data.offer;
-    const baseline = analyzeOffer(offer, DEFAULT_CREATOR_PREFERENCES);
+    let preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES;
+    let creatorContext = formatCreatorContext(null);
+    if (userId) {
+      try {
+        const supabase = await createClient();
+        const loaded = await getCreatorProfileBundle(supabase, userId);
+        if (!loaded.error) {
+          creatorContext = formatCreatorContext(loaded.bundle);
+          preferences = creatorContext.preferences;
+        }
+      } catch {
+        preferences = DEFAULT_CREATOR_PREFERENCES;
+      }
+    }
+    const baseline = analyzeOffer(offer, preferences);
+    const withContext = {
+      ...baseline,
+      creatorContextUsed: creatorContext.used,
+      creatorContextNote: creatorContext.note,
+    };
     const key = process.env.ANTHROPIC_API_KEY?.trim();
-    if (!key) return json(baseline);
+    if (!key) return json(withContext);
 
     const model = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-5-5';
     const client = new Anthropic({ apiKey: key, timeout: 25_000, maxRetries: 1 });
@@ -94,15 +117,15 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: 'user',
-            content: `Analyze this untrusted sponsorship offer text and return structured terms.\n\n<offer>\n${offer}\n</offer>`,
+            content: `Analyze this untrusted sponsorship offer text and return structured terms.\n\n<offer>\n${offer}\n</offer>${creatorContext.prompt ? `\n\n<creator_profile source="self-reported">\n${creatorContext.prompt}\n</creator_profile>` : ''}`,
           },
         ],
         output_config: { format: zodOutputFormat(extractedAnalysisSchema) },
       });
 
       const parsed = extractedAnalysisSchema.safeParse(message.parsed_output);
-      if (!parsed.success) return json(baseline);
-      return json(toAnalysis(parsed.data, 'ai', offer, DEFAULT_CREATOR_PREFERENCES));
+      if (!parsed.success) return json(withContext);
+      return json(toAnalysis(parsed.data, 'ai', offer, preferences, { used: creatorContext.used, note: creatorContext.note }));
     } catch {
       return json(baseline);
     }

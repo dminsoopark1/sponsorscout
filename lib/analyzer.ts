@@ -4,11 +4,30 @@ export const EXAMPLE = `Hi! We're reaching out about an upcoming Postmates creat
 
 export const HLTH_CODE_EXAMPLE = `Hi! We're HLTH Code. We'd love to send you one complimentary bag of our meal shake. In exchange, please create 1 Instagram Reel AND 2 Instagram Stories. Please include your unique affiliate link and coupon code in the Stories. You'll earn a 20% commission on qualifying new-customer orders, and your followers receive 15% off. Please post within 14 days of receiving the product. There may be opportunities for future paid partnerships, but those are not guaranteed.`;
 
-export const DEFAULT_CREATOR_PREFERENCES = {
-  compensationStructure: 'guaranteed_flat_fee' as const,
+export type CompensationStructure = 'guaranteed_flat_fee' | 'flat_fee' | 'hybrid' | 'affiliate_allowed';
+
+export type CreatorPreferences = {
+  compensationStructure: CompensationStructure;
+  minimumGuaranteedFee: number | null;
+  preferredCurrency: string;
+  acceptsGiftedOnly: boolean;
+  acceptsAffiliateLinks: boolean;
+  acceptsCommissionOnly: boolean;
 };
 
-export type CreatorPreferences = typeof DEFAULT_CREATOR_PREFERENCES;
+export const DEFAULT_CREATOR_PREFERENCES: CreatorPreferences = {
+  compensationStructure: 'guaranteed_flat_fee',
+  minimumGuaranteedFee: null,
+  preferredCurrency: 'USD',
+  acceptsGiftedOnly: false,
+  acceptsAffiliateLinks: false,
+  acceptsCommissionOnly: false,
+};
+
+export type AnalysisCreatorContext = {
+  used: boolean;
+  note: string | null;
+};
 
 const platformSchema = z.enum(['Instagram', 'TikTok', 'YouTube', 'Other', 'Unspecified']);
 const compensationModelSchema = z.enum(['flat_fee', 'affiliate', 'gifted', 'hybrid', 'unknown']);
@@ -104,10 +123,12 @@ export const analysisSchema = extractedAnalysisSchema.extend({
   exclusivityLabel: z.string(),
   compensationModelLabel: z.string(),
   preferenceMatch: z.object({
-    preferredModel: z.literal('guaranteed_flat_fee'),
+    preferredModel: z.enum(['guaranteed_flat_fee', 'flat_fee', 'hybrid', 'affiliate_allowed']),
     matches: z.boolean(),
     summary: z.string(),
   }),
+  creatorContextUsed: z.boolean(),
+  creatorContextNote: z.string().nullable(),
   confidence: z.enum(['Limited', 'Moderate']),
   mode: z.enum(['demo', 'ai']),
 });
@@ -200,26 +221,59 @@ function compensationLabel(model: Analysis['compensationModel'], extracted: Extr
   return COMPENSATION_MODEL_LABELS[model];
 }
 
+function preferredModelLabel(structure: CreatorPreferences['compensationStructure']) {
+  if (structure === 'hybrid') return 'hybrid compensation';
+  if (structure === 'affiliate_allowed') return 'affiliate-friendly compensation';
+  return 'guaranteed flat-fee sponsorships';
+}
+
+export function offerMatchesPreferences(
+  extracted: Pick<ExtractedAnalysis, 'compensationModel' | 'guaranteedCash'>,
+  preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
+): boolean {
+  const hasCash = extracted.guaranteedCash != null;
+  const model = extracted.compensationModel;
+  if (
+    hasCash &&
+    preferences.minimumGuaranteedFee != null &&
+    extracted.guaranteedCash! < preferences.minimumGuaranteedFee
+  ) {
+    return false;
+  }
+  if (model === 'gifted' && !preferences.acceptsGiftedOnly) return false;
+  if (model === 'affiliate' && !preferences.acceptsAffiliateLinks && !preferences.acceptsCommissionOnly) {
+    return false;
+  }
+  if (preferences.compensationStructure === 'hybrid') {
+    return hasCash || model === 'hybrid' || model === 'flat_fee' || preferences.acceptsAffiliateLinks;
+  }
+  if (preferences.compensationStructure === 'affiliate_allowed') {
+    return true;
+  }
+  return hasCash && model === 'flat_fee';
+}
+
 function preferenceMatch(
   extracted: ExtractedAnalysis,
   preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
 ): Analysis['preferenceMatch'] {
-  const matches =
-    preferences.compensationStructure === 'guaranteed_flat_fee' &&
-    extracted.compensationModel === 'flat_fee' &&
-    extracted.guaranteedCash != null;
+  const preferredModel = preferences.compensationStructure;
+  const matches = offerMatchesPreferences(extracted, preferences);
   if (matches) {
     return {
-      preferredModel: 'guaranteed_flat_fee',
+      preferredModel,
       matches: true,
-      summary: 'This offer includes guaranteed cash and matches a flat-fee preference.',
+      summary: `This offer matches the saved preference for ${preferredModelLabel(preferredModel)}.`,
     };
   }
+  const minNote =
+    preferences.minimumGuaranteedFee != null
+      ? ` The saved minimum guaranteed fee is ${preferences.preferredCurrency} ${preferences.minimumGuaranteedFee.toLocaleString()} (creator-stated, not a market estimate).`
+      : '';
   return {
-    preferredModel: 'guaranteed_flat_fee',
+    preferredModel,
     matches: false,
-    summary:
-      'Preference mismatch: this creator accepts guaranteed flat-fee sponsorships, and the proposal does not include guaranteed cash.',
+    summary: `Preference mismatch: this creator prefers ${preferredModelLabel(preferredModel)}, and the proposal does not match that structure.${minNote}`,
   };
 }
 
@@ -265,6 +319,7 @@ export function toAnalysis(
   mode: Analysis['mode'],
   source: string,
   preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
+  creatorContext: AnalysisCreatorContext = { used: false, note: null },
 ): Analysis {
   const extracted = sanitizeExtracted(source, extractedInput);
   const match = preferenceMatch(extracted, preferences);
@@ -288,6 +343,8 @@ export function toAnalysis(
     exclusivityLabel: extracted.exclusivity.summary,
     compensationModelLabel: compensationLabel(extracted.compensationModel, extracted),
     preferenceMatch: match,
+    creatorContextUsed: creatorContext.used,
+    creatorContextNote: creatorContext.note,
     confidence: 'Limited',
     mode,
   });
@@ -326,6 +383,7 @@ function perpetualRights(kind: 'organic' | 'paid') {
 export function analyzeOffer(
   input: string,
   preferences: CreatorPreferences = DEFAULT_CREATOR_PREFERENCES,
+  creatorContext: AnalysisCreatorContext = { used: false, note: null },
 ): Analysis {
   const s = input.toLowerCase();
   const brand = /hlth\s*code/i.test(input)
@@ -584,5 +642,5 @@ export function analyzeOffer(
     draft,
   };
 
-  return toAnalysis(extracted, 'demo', input, preferences);
+  return toAnalysis(extracted, 'demo', input, preferences, creatorContext);
 }
